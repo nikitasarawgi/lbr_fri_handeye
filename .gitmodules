@@ -1,0 +1,9 @@
+[submodule "src/realsense-ros"]
+	path = src/realsense-ros
+	url = https://github.com/nikitasarawgi/realsense-ros.git
+[submodule "src/lbr_fri_ros2_stack"]
+	path = src/lbr_fri_ros2_stack
+	url = https://github.com/nikitasarawgi/lbr_fri_ros2_stack.git
+[submodule "src/fri_vendor"]
+	path = src/fri_vendor
+	url = https://github.com/lbr-stack/fri_vendor.git
