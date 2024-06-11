@@ -57,18 +57,41 @@ geometry_msgs::msg::TransformStamped cvMatToTransformStamped(const cv::Mat& tran
     return transformStamped;
 }
 
-geometry_msgs::msg::TransformStamped poseToTransform(const geometry_msgs::msg::PoseStamped& pose, const std::string& child_frame_id){
+geometry_msgs::msg::TransformStamped poseToTransform(geometry_msgs::msg::PoseStamped p, const std::string& child_frame_id){
 
-    tf2::Vector3 position;  
-    tf2::fromMsg(pose.pose.position, position);
-    tf2::Quaternion orientation;
-    tf2::fromMsg(pose.pose.orientation, orientation);
+    // tf2::Vector3 position;  
+    // tf2::fromMsg(pose.pose.position, position);
+    // tf2::Quaternion orientation;
+    // tf2::fromMsg(pose.pose.orientation, orientation);
 
-    geometry_msgs::msg::TransformStamped transform;
-    transform.child_frame_id = child_frame_id;
-    transform.header.frame_id = pose.header.frame_id;
-    transform.transform.translation = tf2::toMsg(position);
-    transform.transform.rotation = tf2::toMsg(orientation);
+    // geometry_msgs::msg::TransformStamped transform;
+    // transform.child_frame_id = child_frame_id;
+    // transform.header.frame_id = pose.header.frame_id;
+    // transform.transform.translation = tf2::toMsg(position);
+    // transform.transform.rotation = tf2::toMsg(orientation);
+
+    auto logger = rclcpp::get_logger("trasnformLogger");
+    // RCLCPP_INFO(logger, "HERE");
+
+
+    geometry_msgs::msg::TransformStamped t;
+    // RCLCPP_INFO(logger, "Just printing x here. x: %f", p.pose.position.x);
+    // RCLCPP_INFO(logger, "Just printing y here. y: %f", p.pose.position.y);
+    // RCLCPP_INFO(logger, "Just printing z here. z: %f", p.pose.position.z);
+    // t.child_frame_id = child_frame_id;
+    t.header.frame_id = p.header.frame_id;
+    t.transform.translation.x = p.pose.position.x;
+    t.transform.translation.y = p.pose.position.y;
+    t.transform.translation.z = p.pose.position.z;
+    t.transform.rotation = p.pose.orientation;
+
+    // RCLCPP_INFO(logger, "Just printing x here. x: %f", t.transform.translation.x);
+    // RCLCPP_INFO(logger, "Just printing y here. y: %f", t.transform.translation.y);
+    // RCLCPP_INFO(logger, "Just printing z here. z: %f", t.transform.translation.z);
+                        
+
+    return t;
+    // RCLCPP_INFO(logger, "returning from here");
 }
 
 std::vector<Eigen::Matrix4d> transformVecToEigenVec(const std::vector<geometry_msgs::msg::TransformStamped> transformVec){

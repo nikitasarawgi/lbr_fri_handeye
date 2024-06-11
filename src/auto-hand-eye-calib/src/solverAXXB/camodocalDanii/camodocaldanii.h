@@ -17,8 +17,6 @@ class CamodocalDanii: public SolverAXXB{
             }
         Eigen::Matrix4d SolveX();
     private:
-        std::vector<Eigen::Matrix4d> A_;
-        std::vector<Eigen::Matrix4d> B_;
         camodocal::HandEyeCalibration calibrator;
 
 };

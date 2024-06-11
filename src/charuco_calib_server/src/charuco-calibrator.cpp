@@ -4,6 +4,7 @@
 // #include <opencv2/aruco/dictionary.hpp>
 #include <opencv2/highgui.hpp>
 #include "charuco-calibrator.h"
+#include "rclcpp/rclcpp.hpp"
 
 CharucoCalibrator::CharucoCalibrator(){
 
@@ -20,15 +21,21 @@ CharucoCalibrator::CharucoCalibrator(int squaresX, int squaresY, float squareLen
 
 void CharucoCalibrator::createCharucoBoard(){
     cv::Size size(this->squaresX, this->squaresY);
-    this->charucoBoard = cv::makePtr<cv::aruco::CharucoBoard>(size, this->squareLength, this->markerLength, this->dictionary);
+    // this->charucoBoard = cv::makePtr<cv::aruco::CharucoBoard>(size, this->squareLength, this->markerLength, this->dictionary);
+
+    this->charucoBoard = cv::aruco::CharucoBoard::create(this->squaresX, this->squaresY, this->squareLength, this->markerLength, this->dictionary);
 }
 
 void CharucoCalibrator::setCameraProperties(std::array<double, 9UL> k, std::vector<double> d){
+    auto logger = rclcpp::get_logger("caliblogger");
+    RCLCPP_INFO(logger, "Setting Camera properties..");
     this->cameraMatrix = cv::Mat(3, 3, CV_64F, (void*)k.data()).clone();
     this->distCoeffs = cv::Mat(1, d.size(), CV_64F, (void*)d.data()).clone();
+    RCLCPP_INFO(logger, "HERE HERE cameraMatrixSize: %d, dist: %d", this->cameraMatrix.size().width, this->distCoeffs.size().width);
 }
 
 cv::Mat CharucoCalibrator::calibrate(cv::Mat image){
+    auto logger = rclcpp::get_logger("caliblogger");
     cv::Vec3d rvec, tvec;
 
     // no explanation necessary. Please refer to opencv documentations and tutorials
@@ -52,6 +59,8 @@ cv::Mat CharucoCalibrator::calibrate(cv::Mat image){
         if(charucoIds.size() > 0){
             cv::Scalar color = cv::Scalar(255, 0, 0);
             cv::aruco::drawDetectedCornersCharuco(imageCopy, charucoCorners, charucoIds, color);
+            RCLCPP_INFO(logger, "CharucoCornerSize: %d, charucoIdsSize: %d", charucoCorners.size(), charucoIds.size());
+            RCLCPP_INFO(logger, "cameraMatrixSize: %d, dist: %d", this->cameraMatrix.size(), this->distCoeffs.size());
             bool valid = cv::aruco::estimatePoseCharucoBoard(charucoCorners, charucoIds, this->charucoBoard, this->cameraMatrix, this->distCoeffs, rvec, tvec);
             if(valid){
                  cv::drawFrameAxes(imageCopy, this->cameraMatrix, this->distCoeffs, rvec, tvec, 0.1f);

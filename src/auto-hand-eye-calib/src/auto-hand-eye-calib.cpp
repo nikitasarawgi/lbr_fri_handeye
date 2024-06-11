@@ -24,12 +24,12 @@ class AutoHandEyeCalib : public rclcpp::Node{
         AutoHandEyeCalib():Node("auto_hand_eye_calib"){
             RCLCPP_INFO(this->get_logger(), "AutoHandEyeCalib started...");
 
-            this->declare_parameter("image_topic", "/camera/color/image_raw");
-            this->declare_parameter("joint_state_topic", "/joint_states");
+            this->declare_parameter("image_topic", "/camera/camera/color/image_raw");
+            this->declare_parameter("joint_state_topic", "/lbr/joint_states");
             this->declare_parameter("camera_calibration_file", "./cameraCalibrated987.txt");
             this->declare_parameter("joint_state_file", "./jointState987.txt");
             this->declare_parameter("image_data_folder", "./images/");
-            this->declare_parameter("save_images", false);
+            this->declare_parameter("save_images", true);
             this->declare_parameter("is_calibrate_camera", true);
 
             imageTopic_ = this->get_parameter("image_topic").as_string();
@@ -45,8 +45,9 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 saveImageData_ = true;
             }
 
-            calibCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
             fkCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            calibCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            
             imageCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
             jointStateCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
@@ -72,7 +73,7 @@ class AutoHandEyeCalib : public rclcpp::Node{
             readImage_ = false;
             readJointState_ = false;
 
-            fkClient_ = this->create_client<moveit_msgs::srv::GetPositionFK>("/compute_fk", rmw_qos_profile_default, fkCallbackGroup_);
+            fkClient_ = this->create_client<moveit_msgs::srv::GetPositionFK>("/lbr/compute_fk", rmw_qos_profile_default, fkCallbackGroup_);
             cameraCalibrationClient_ = this->create_client<hand_eye_msgs::srv::CameraCalibratedTransform>("/charuco_calib_server", rmw_qos_profile_default, calibCallbackGroup_);
 
             while(!cameraCalibrationClient_->wait_for_service(std::chrono::seconds(1))){
@@ -104,21 +105,24 @@ class AutoHandEyeCalib : public rclcpp::Node{
         void getLastImage(){
             RCLCPP_INFO(this->get_logger(), "Getting the last image data...");
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<std::mutex> lock(mutex1_);
                 readImage_ = true;
-            }   
+            } 
+            return;  
         }
         void getLastJointState(){
             RCLCPP_INFO(this->get_logger(), "Getting the last joint state data...");
             {
-                std::lock_guard<std::mutex> lock(mutex_);
+                std::lock_guard<std::mutex> lock(mutex1_);
                 readJointState_ = true; 
-            }       
+            } 
+            return;      
         }
         void imageCallback(const sensor_msgs::msg::Image::SharedPtr image){
             if(readImage_){
                 {
-                    std::lock_guard<std::mutex> lock(mutex_);
+                    RCLCPP_INFO(this->get_logger(), "I am in image callback...");
+                    std::lock_guard<std::mutex> lock(mutex1_);
                     if(isCalibrateCamera_){
                         readImage_ = false;
                     }
@@ -145,10 +149,13 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 // if(rclcpp::spin_until_future_complete(this->get_node_base_interface(), result)
                 //     == rclcpp::FutureReturnCode::SUCCESS){
                 if(status == std::future_status::ready){
-                        RCLCPP_INFO(this->get_logger(), "Camera calibration data received successfully...");
+                        RCLCPP_INFO(this->get_logger(), "Camera calibration data received ...");
                         // Save the data to the vector
                         geometry_msgs::msg::TransformStamped t = result.get()->transform;
-                        cameraCalibrationData_.push_back(t);
+                        {
+                            std::lock_guard<std::mutex> data_lock(mutex2_);
+                            cameraCalibrationData_.push_back(t);
+                        }
                 }else{
                     RCLCPP_ERROR(this->get_logger(), "Failed to receive camera calibration data...");
                     return;
@@ -158,8 +165,10 @@ class AutoHandEyeCalib : public rclcpp::Node{
         void jointStateCallback(const sensor_msgs::msg::JointState::SharedPtr jointState){
             if(readJointState_){
                 if(isCalibrateCamera_){
-                    std::lock_guard<std::mutex> lock(mutex_);
-                    readJointState_ = false;
+                    {
+                        std::lock_guard<std::mutex> lock(mutex1_);
+                        readJointState_ = false;
+                    }
                 }
                 RCLCPP_INFO(this->get_logger(), "Joint state data received...");
 
@@ -177,15 +186,33 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 if(status == std::future_status::ready){
                         RCLCPP_INFO(this->get_logger(), "Forward kinematics data received successfully...");
                         // Convert the data to geometry_msgs and save the data to the vector
-                        geometry_msgs::msg::PoseStamped pose = result.get()->pose_stamped[0];
-                        geometry_msgs::msg::TransformStamped transform = poseToTransform(pose, "link_ee");
-                        jointStateData_.push_back(transform);
+                        geometry_msgs::msg::PoseStamped p = result.get()->pose_stamped[0];
+                        // RCLCPP_INFO(this->get_logger(), "Just printing x here. x: %f", p.pose.position.x);
+                        // RCLCPP_INFO(this->get_logger(), "Just printing y here. y: %f", p.pose.position.y);
+                        // RCLCPP_INFO(this->get_logger(), "Just printing z here. z: %f", p.pose.position.z);
+                        // RCLCPP_INFO(this->get_logger(), "Here successfully...");
+                        geometry_msgs::msg::TransformStamped t = poseToTransform(p, "link_ee");
+                        // RCLCPP_INFO(this->get_logger(), "Here also successfully...");
+                        // RCLCPP_INFO(this->get_logger(), "Just printing x here. x: %f", t.transform.translation.x);
+                        // RCLCPP_INFO(this->get_logger(), "Just printing y here. y: %f", t.transform.translation.y);
+                        // RCLCPP_INFO(this->get_logger(), "Just printing z here. z: %f", t.transform.translation.z);
+                        
+                        {
+                            std::lock_guard<std::mutex> data_lock(mutex2_);
+                            jointStateData_.push_back(t);
+                            // RCLCPP_INFO(this->get_logger(), "Here also 2 successfully...");
+                            RCLCPP_INFO(this->get_logger(), "Transformation pushed. New size: %d", jointStateData_.size());
+                        }
+                        // RCLCPP_INFO(this->get_logger(), "Here also 3 successfully...");
+                        return;
                         
                 }else{
                     RCLCPP_ERROR(this->get_logger(), "Failed to receive moveit FK data...");
                     return;
                 }
-            }    
+                // RCLCPP_INFO(this->get_logger(), "Here also 3 successfully...");
+                // return;
+            }   
         }
         void saveData(){
             // Save both the transform vectors into their respective files  
@@ -270,6 +297,8 @@ class AutoHandEyeCalib : public rclcpp::Node{
             jfile.close();
         }
         void calculateFinalTransforms(){
+            RCLCPP_INFO(this->get_logger(), "Calculating final transforms...");
+
             std::vector<Eigen::Matrix4d> cameraCalibrationEigen = transformVecToEigenVec(cameraCalibrationData_);
             std::vector<Eigen::Matrix4d> jointStateEigen = transformVecToEigenVec(jointStateData_);
 
@@ -280,36 +309,38 @@ class AutoHandEyeCalib : public rclcpp::Node{
             for(int i = 0; i < jointStateEigen.size() - 1; i ++){
                 Eigen::Matrix4d A = jointStateEigen[i].inverse() * jointStateEigen[i + 1];
                 A_values.push_back(A);
+
             }
+            RCLCPP_INFO(this->get_logger(), "Size of A_values: %d", A_values.size());
             for(int i = 0; i < cameraCalibrationEigen.size() - 1; i++){
                 Eigen::Matrix4d B = cameraCalibrationEigen[i] * cameraCalibrationEigen[i + 1].inverse();
                 B_values.push_back(B);
             }
-
+            RCLCPP_INFO(this->get_logger(), "Size of B_values: %d", B_values.size());
              // Testing the solvers
             RCLCPP_INFO(this->get_logger(), "Testing the solvers...");
 
-            // Zhixy's solver
-            ConventionalAXXBSVDSolver zhixy_conv_solver(A_values, B_values);
-            Pose result = zhixy_conv_solver.SolveX();
-            RCLCPP_INFO(this->get_logger(), "Zhixy's ConventionalAXXBSVDSolver: ");
-            printMatrix(result);
+            // // Zhixy's solver
+            // ConventionalAXXBSVDSolver zhixy_conv_solver(A_values, B_values);
+            // Pose result = zhixy_conv_solver.SolveX();
+            // RCLCPP_INFO(this->get_logger(), "Zhixy's ConventionalAXXBSVDSolver: ");
+            // printMatrix(result);
 
-            ExtendedAXXBEliLambdaSVDSolver zhixy_ext_solver(A_values, B_values);
-            Pose result2 = zhixy_ext_solver.SolveX();
-            RCLCPP_INFO(this->get_logger(), "Zhixy's ExtendedAXXBEliLambdaSVDSolver: ");
-            printMatrix(result2);
+            // ExtendedAXXBEliLambdaSVDSolver zhixy_ext_solver(A_values, B_values);
+            // Pose result2 = zhixy_ext_solver.SolveX();
+            // RCLCPP_INFO(this->get_logger(), "Zhixy's ExtendedAXXBEliLambdaSVDSolver: ");
+            // printMatrix(result2);
 
-            AndreffExtendedAXXBSolver zhixy_ext2_solver(A_values, B_values);
-            Pose result3 = zhixy_ext2_solver.SolveX();
-            RCLCPP_INFO(this->get_logger(), "Zhixy's AndreffExtendedAXXBSolver: ");
-            printMatrix(result3);
+            // AndreffExtendedAXXBSolver zhixy_ext2_solver(A_values, B_values);
+            // Pose result3 = zhixy_ext2_solver.SolveX();
+            // RCLCPP_INFO(this->get_logger(), "Zhixy's AndreffExtendedAXXBSolver: ");
+            // printMatrix(result3);
 
-            // Tsai's solver
-            TsaiAXXB tsai_solver(A_values, B_values);
-            Eigen::Matrix4d result4 = tsai_solver.SolveX();
-            RCLCPP_INFO(this->get_logger(), "Tsai's TsaiAXXB: ");
-            printMatrix(result4);
+            // // Tsai's solver
+            // TsaiAXXB tsai_solver(A_values, B_values);
+            // Eigen::Matrix4d result4 = tsai_solver.SolveX();
+            // RCLCPP_INFO(this->get_logger(), "Tsai's TsaiAXXB: ");
+            // printMatrix(result4);
 
             CamodocalDanii camodocal_solver(jointStateEigen, cameraCalibrationEigen);
              Eigen::Matrix4d result5 = camodocal_solver.SolveX();
@@ -357,7 +388,8 @@ class AutoHandEyeCalib : public rclcpp::Node{
         int numObservations_;
         std::thread inputThread_;
         bool keepRunning_;
-        std::mutex mutex_;
+        std::mutex mutex1_;
+        std::mutex mutex2_;
         bool saveImageData_;
         bool isCalibrateCamera_;
         std::string cameraCalibrationDataFile_;
@@ -382,6 +414,7 @@ int main(int argc, char* argv[]){
     auto node = std::make_shared<AutoHandEyeCalib>();
     rclcpp::executors::MultiThreadedExecutor executor;
     executor.add_node(node);
+    executor.spin();
     rclcpp::shutdown();
     return 0;
 }

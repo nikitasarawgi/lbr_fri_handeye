@@ -22,8 +22,8 @@ class CharucoCalibServer : public rclcpp::Node{
         : Node("charuco_calib_server"){
             this->declare_parameter("squaresX", 5);
             this->declare_parameter("squaresY", 6);
-            this->declare_parameter("squareLength", 30.0);
-            this->declare_parameter("markerLength", 15.0);
+            this->declare_parameter("squareLength", 38.0);
+            this->declare_parameter("markerLength", 19.0);
             this->declare_parameter("dictionaryId", 11);
 
             int squaresX = this->get_parameter("squaresX").as_int();
@@ -37,8 +37,9 @@ class CharucoCalibServer : public rclcpp::Node{
             // Create a subscriber to get the camera info, only once
             this->declare_parameter("camera_info_topic", "/camera/camera_info");
             std::string cameraInfoTopic = this->get_parameter("camera_info_topic").as_string();
+            RCLCPP_INFO(this->get_logger(), "Printing the cameraInfoTopic: %s", cameraInfoTopic.c_str());
             cameraInfoSub = this->create_subscription<sensor_msgs::msg::CameraInfo>(
-                cameraInfoTopic, 10, std::bind(&CharucoCalibServer::cameraInfoCallback, this, std::placeholders::_1));
+                cameraInfoTopic.c_str(), 10, std::bind(&CharucoCalibServer::cameraInfoCallback, this, std::placeholders::_1));
         }
         void calibrateServer(const std::shared_ptr<hand_eye_msgs::srv::CameraCalibratedTransform::Request> request,
                                     const std::shared_ptr<hand_eye_msgs::srv::CameraCalibratedTransform::Response> response){

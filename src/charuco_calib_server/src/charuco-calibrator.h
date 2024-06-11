@@ -10,7 +10,7 @@ class CharucoCalibrator{
         int squaresX, squaresY;
         float squareLength, markerLength;
         cv::Mat cameraMatrix, distCoeffs;
-        cv::aruco::Dictionary dictionary;
+        cv::Ptr<cv::aruco::Dictionary> dictionary;
         cv::Ptr<cv::aruco::CharucoBoard> charucoBoard;
 
         CharucoCalibrator();
