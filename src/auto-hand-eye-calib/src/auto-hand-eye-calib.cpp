@@ -45,24 +45,35 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 saveImageData_ = true;
             }
 
+            calibCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            fkCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            imageCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+            jointStateCallbackGroup_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
+            rclcpp::SubscriptionOptions imageSubOptions;
+            imageSubOptions.callback_group = imageCallbackGroup_;
             imageSub_ = this->create_subscription<sensor_msgs::msg::Image>(
                 imageTopic_,
                 10,
-                std::bind(&AutoHandEyeCalib::imageCallback, this, std::placeholders::_1)
+                std::bind(&AutoHandEyeCalib::imageCallback, this, std::placeholders::_1),
+                imageSubOptions
             );
 
+            rclcpp::SubscriptionOptions jointStateSubOptions;
+            jointStateSubOptions.callback_group = jointStateCallbackGroup_;
             jointStateSub_ = this->create_subscription<sensor_msgs::msg::JointState>(
                 jointStateTopic_,
                 10,
-                std::bind(&AutoHandEyeCalib::jointStateCallback, this, std::placeholders::_1)
+                std::bind(&AutoHandEyeCalib::jointStateCallback, this, std::placeholders::_1),
+                jointStateSubOptions
             );
 
             numObservations_ = 0;
             readImage_ = false;
             readJointState_ = false;
 
-            fkClient_ = this->create_client<moveit_msgs::srv::GetPositionFK>("/compute_fk");
-            cameraCalibrationClient_ = this->create_client<hand_eye_msgs::srv::CameraCalibratedTransform>("/charuco_calib_server");
+            fkClient_ = this->create_client<moveit_msgs::srv::GetPositionFK>("/compute_fk", rmw_qos_profile_default, fkCallbackGroup_);
+            cameraCalibrationClient_ = this->create_client<hand_eye_msgs::srv::CameraCalibratedTransform>("/charuco_calib_server", rmw_qos_profile_default, calibCallbackGroup_);
 
             while(!cameraCalibrationClient_->wait_for_service(std::chrono::seconds(1))){
                 if(!rclcpp::ok()){
@@ -130,8 +141,10 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 request->image = *image;
                 
                 auto result = cameraCalibrationClient_->async_send_request(request);
-                if(rclcpp::spin_until_future_complete(this->get_node_base_interface(), result)
-                    == rclcpp::FutureReturnCode::SUCCESS){
+                std::future_status status = result.wait_for(std::chrono::seconds(5));
+                // if(rclcpp::spin_until_future_complete(this->get_node_base_interface(), result)
+                //     == rclcpp::FutureReturnCode::SUCCESS){
+                if(status == std::future_status::ready){
                         RCLCPP_INFO(this->get_logger(), "Camera calibration data received successfully...");
                         // Save the data to the vector
                         geometry_msgs::msg::TransformStamped t = result.get()->transform;
@@ -158,8 +171,10 @@ class AutoHandEyeCalib : public rclcpp::Node{
                 request->robot_state.joint_state = *jointState;
 
                 auto result = fkClient_->async_send_request(request);
-                if(rclcpp::spin_until_future_complete(this->get_node_base_interface(), result)
-                    == rclcpp::FutureReturnCode::SUCCESS){
+                std::future_status status = result.wait_for(std::chrono::seconds(5));
+                // if(rclcpp::spin_until_future_complete(this->get_node_base_interface(), result)
+                //     == rclcpp::FutureReturnCode::SUCCESS){
+                if(status == std::future_status::ready){
                         RCLCPP_INFO(this->get_logger(), "Forward kinematics data received successfully...");
                         // Convert the data to geometry_msgs and save the data to the vector
                         geometry_msgs::msg::PoseStamped pose = result.get()->pose_stamped[0];
@@ -351,6 +366,11 @@ class AutoHandEyeCalib : public rclcpp::Node{
 
         std::vector<geometry_msgs::msg::TransformStamped> cameraCalibrationData_;
         std::vector<geometry_msgs::msg::TransformStamped> jointStateData_;
+
+        rclcpp::CallbackGroup::SharedPtr calibCallbackGroup_;
+        rclcpp::CallbackGroup::SharedPtr fkCallbackGroup_;
+        rclcpp::CallbackGroup::SharedPtr imageCallbackGroup_;
+        rclcpp::CallbackGroup::SharedPtr jointStateCallbackGroup_;
     
 };
 
@@ -358,7 +378,10 @@ class AutoHandEyeCalib : public rclcpp::Node{
 
 int main(int argc, char* argv[]){
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<AutoHandEyeCalib>());
+    // rclcpp::spin(std::make_shared<AutoHandEyeCalib>());
+    auto node = std::make_shared<AutoHandEyeCalib>();
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
     rclcpp::shutdown();
     return 0;
 }
