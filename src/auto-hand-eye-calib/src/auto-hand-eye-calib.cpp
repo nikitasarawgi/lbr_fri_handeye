@@ -366,6 +366,9 @@ class AutoHandEyeCalib : public rclcpp::Node{
             RCLCPP_INFO(this->get_logger(), "Camodocal's CamodocalDanii: ");
             printMatrix(result5);
 
+            RCLCPP_INFO(this->get_logger(), "Printing the inverse of the result...");
+            printMatrix(result5.inverse());
+
             RCLCPP_INFO(this->get_logger(), "PRINTING TFC PART 1...");
             Eigen::Matrix4d tfc = cameraCalibrationEigen[0] * result5.inverse() * jointStateEigen[0];
             printMatrix(tfc.inverse());

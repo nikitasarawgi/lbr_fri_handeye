@@ -39,20 +39,20 @@ cv::Mat CharucoCalibrator::calibrate(cv::Mat image){
     // no explanation necessary. Please refer to opencv documentations and tutorials
     cv::Mat imageCopy;
     image.copyTo(imageCopy);
-    cv::Mat grayImage;
-    cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
+    // cv::Mat grayImage;
+    // cv::cvtColor(image, grayImage, cv::COLOR_BGR2GRAY);
 
     std::vector<int> markerIds;
     std::vector<std::vector<cv::Point2f>> markerCorners;
     cv::Ptr<cv::aruco::DetectorParameters> params = cv::makePtr<cv::aruco::DetectorParameters>();
 
-    cv::aruco::detectMarkers(grayImage, cv::makePtr<cv::aruco::Dictionary>(this->dictionary), markerCorners, markerIds, params);
+    cv::aruco::detectMarkers(image, cv::makePtr<cv::aruco::Dictionary>(this->dictionary), markerCorners, markerIds, params);
 
     if(markerIds.size() > 0){
         cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
         std::vector<cv::Point2f> charucoCorners;
         std::vector<int> charucoIds;
-        cv::aruco::interpolateCornersCharuco(markerCorners, markerIds, grayImage, this->charucoBoard, charucoCorners, charucoIds, this->cameraMatrix, this->distCoeffs);
+        cv::aruco::interpolateCornersCharuco(markerCorners, markerIds, image, this->charucoBoard, charucoCorners, charucoIds, this->cameraMatrix, this->distCoeffs);
 
         if(charucoIds.size() > 0){
             cv::Scalar color = cv::Scalar(255, 0, 0);
@@ -65,6 +65,7 @@ cv::Mat CharucoCalibrator::calibrate(cv::Mat image){
         }
     }
     cv::imshow("out", imageCopy);
+    cv::waitKey(0);
 
     // convert rvec and tvec into a transformation matrix
     cv::Mat R;

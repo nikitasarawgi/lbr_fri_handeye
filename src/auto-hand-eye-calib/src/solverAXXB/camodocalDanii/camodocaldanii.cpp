@@ -74,20 +74,24 @@ Eigen::Matrix4d CamodocalDanii::SolveX()
     auto t2_it = B_.begin();
 
     bool firstTransform = true;
-    Eigen::Matrix4d firstAInverse, firstBInverse;
+    Eigen::Matrix4d firstAInverse, firstBInverse, firstA, firstB;
 
     for(int i = 0; i < A_.size(); ++i, ++t1_it, ++t2_it){
 
         auto &transformA = *t1_it;
         auto &transformB = *t2_it;
 
+        // Note: what i need to find position of Camera(2) wrt Camera(1)
+        // So instead of having firstAInverse * transformA, it should be the opposite way around
+        // So trying that here
+        // However, the same does not hold for the flange to base part (see the equations)
         if(firstTransform){
-            firstAInverse = transformA.inverse();
+            firstA = transformA;
             firstBInverse = transformB.inverse();
             firstTransform = false;
         }
         else{
-            Eigen::Matrix4d A = firstAInverse * transformA;
+            Eigen::Matrix4d A = firstA * transformA.inverse();
             Eigen::Matrix4d B = firstBInverse * transformB;
 
             Eigen::Matrix3d Ra = A.block<3,3>(0, 0);
@@ -104,6 +108,30 @@ Eigen::Matrix4d CamodocalDanii::SolveX()
             rvecs2.push_back(rvecB);
             tvecs2.push_back(Tb);
         }
+
+        // if(firstTransform){
+        //     firstAInverse = transformA.inverse();
+        //     firstBInverse = transformB.inverse();
+        //     firstTransform = false;
+        // }
+        // else{
+        //     Eigen::Matrix4d A = firstAInverse * transformA;
+        //     Eigen::Matrix4d B = firstBInverse * transformB;
+
+        //     Eigen::Matrix3d Ra = A.block<3,3>(0, 0);
+        //     Eigen::Matrix3d Rb = B.block<3,3>(0, 0);
+        //     Eigen::Vector3d Ta = A.block<3,1>(0, 3) * 1000;
+        //     Eigen::Vector3d Tb = B.block<3,1>(0, 3);
+        //     Eigen::AngleAxisd angleAxisA(Ra);
+        //     Eigen::AngleAxisd angleAxisB(Rb);
+        //     Eigen::Vector3d rvecA = angleAxisA.axis() * angleAxisA.angle();
+        //     Eigen::Vector3d rvecB = angleAxisB.axis() * angleAxisB.angle();
+
+        //     rvecs1.push_back(rvecA);
+        //     tvecs1.push_back(Ta);
+        //     rvecs2.push_back(rvecB);
+        //     tvecs2.push_back(Tb);
+        // }
     }
 
     RCLCPP_INFO(logger, "rvec1: %d, tvec1: %d, rvec2: %d, tvec2: %d", rvecs1.size(), tvecs1.size(), rvecs2.size(), tvecs2.size());
