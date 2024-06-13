@@ -30,75 +30,94 @@ int getch() {
 geometry_msgs::msg::TransformStamped cvMatToTransformStamped(const cv::Mat& transform, const std::string& frame_id, const std::string& child_frame_id){
     geometry_msgs::msg::TransformStamped transformStamped;
 
-    // Set the frame IDs
     transformStamped.header.frame_id = frame_id;
     transformStamped.child_frame_id = child_frame_id;
 
-    // Set the translation
     tf2::Vector3 position;
 
-    position.setX(transform.at<double>(0, 3));
-    position.setY(transform.at<double>(1, 3));
-    position.setZ(transform.at<double>(2, 3));
-     transformStamped.transform.translation = tf2::toMsg(position);
+    // position.setX(transform.at<double>(0, 3));
+    // position.setY(transform.at<double>(1, 3));
+    // position.setZ(transform.at<double>(2, 3));
+    //  transformStamped.transform.translation = tf2::toMsg(position);
 
-    // Convert rotation matrix to quaternion
-    tf2::Matrix3x3 rotMatrix(
-        transform.at<double>(0, 0), transform.at<double>(0, 1), transform.at<double>(0, 2),
-        transform.at<double>(1, 0), transform.at<double>(1, 1), transform.at<double>(1, 2),
-        transform.at<double>(2, 0), transform.at<double>(2, 1), transform.at<double>(2, 2)
-    );
-    tf2::Quaternion quaternion;
-    rotMatrix.getRotation(quaternion);
+    // without tf2
+    position.x() = transform.at<double>(0, 3);
+    position.y() = transform.at<double>(1, 3);
+    position.z() = transform.at<double>(2, 3);
+    transformStamped.transform.translation.x = position.x();
+    transformStamped.transform.translation.y = position.y();
+    transformStamped.transform.translation.z = position.z();
 
-    // Set the rotation
-    transformStamped.transform.rotation = tf2::toMsg(quaternion);
+    // tf2::Matrix3x3 rotMatrix(
+    //     transform.at<double>(0, 0), transform.at<double>(0, 1), transform.at<double>(0, 2),
+    //     transform.at<double>(1, 0), transform.at<double>(1, 1), transform.at<double>(1, 2),
+    //     transform.at<double>(2, 0), transform.at<double>(2, 1), transform.at<double>(2, 2)
+    // );
+    // tf2::Quaternion quaternion;
+    // rotMatrix.getRotation(quaternion);
+
+    // transformStamped.transform.rotation = tf2::toMsg(quaternion);
+
+    // without using tf2
+    Eigen::Matrix3d rotMatrix;
+    rotMatrix << transform.at<double>(0, 0), transform.at<double>(0, 1), transform.at<double>(0, 2),
+                transform.at<double>(1, 0), transform.at<double>(1, 1), transform.at<double>(1, 2),
+                transform.at<double>(2, 0), transform.at<double>(2, 1), transform.at<double>(2, 2);
+    Eigen::Quaterniond quaternion(rotMatrix);
+    transformStamped.transform.rotation.x = quaternion.x();
+    transformStamped.transform.rotation.y = quaternion.y();
+    transformStamped.transform.rotation.z = quaternion.z();
+    transformStamped.transform.rotation.w = quaternion.w();
 
     return transformStamped;
 }
 
 geometry_msgs::msg::TransformStamped poseToTransform(geometry_msgs::msg::PoseStamped p, const std::string& child_frame_id){
-
-    // tf2::Vector3 position;  
-    // tf2::fromMsg(pose.pose.position, position);
-    // tf2::Quaternion orientation;
-    // tf2::fromMsg(pose.pose.orientation, orientation);
-
-    // geometry_msgs::msg::TransformStamped transform;
-    // transform.child_frame_id = child_frame_id;
-    // transform.header.frame_id = pose.header.frame_id;
-    // transform.transform.translation = tf2::toMsg(position);
-    // transform.transform.rotation = tf2::toMsg(orientation);
+    // without tf2
 
     auto logger = rclcpp::get_logger("trasnformLogger");
-    // RCLCPP_INFO(logger, "HERE");
-
 
     geometry_msgs::msg::TransformStamped t;
-    // RCLCPP_INFO(logger, "Just printing x here. x: %f", p.pose.position.x);
-    // RCLCPP_INFO(logger, "Just printing y here. y: %f", p.pose.position.y);
-    // RCLCPP_INFO(logger, "Just printing z here. z: %f", p.pose.position.z);
-    // t.child_frame_id = child_frame_id;
+
+    t.child_frame_id = child_frame_id;
     t.header.frame_id = p.header.frame_id;
     t.transform.translation.x = p.pose.position.x;
     t.transform.translation.y = p.pose.position.y;
     t.transform.translation.z = p.pose.position.z;
     t.transform.rotation = p.pose.orientation;
 
-    // RCLCPP_INFO(logger, "Just printing x here. x: %f", t.transform.translation.x);
-    // RCLCPP_INFO(logger, "Just printing y here. y: %f", t.transform.translation.y);
-    // RCLCPP_INFO(logger, "Just printing z here. z: %f", t.transform.translation.z);
-                        
-
     return t;
-    // RCLCPP_INFO(logger, "returning from here");
+}
+
+Eigen::Matrix4d transformToEigenMatrix(const geometry_msgs::msg::TransformStamped& tf) {
+    Eigen::Matrix4d eigenMatrix = Eigen::Matrix4d::Identity();
+
+    // Translation
+    eigenMatrix(0, 3) = tf.transform.translation.x;
+    eigenMatrix(1, 3) = tf.transform.translation.y;
+    eigenMatrix(2, 3) = tf.transform.translation.z;
+
+    // Rotation
+    Eigen::Quaterniond q(
+        tf.transform.rotation.w,
+        tf.transform.rotation.x,
+        tf.transform.rotation.y,
+        tf.transform.rotation.z
+    );
+    eigenMatrix.block<3,3>(0,0) = q.normalized().toRotationMatrix();
+
+    return eigenMatrix;
 }
 
 std::vector<Eigen::Matrix4d> transformVecToEigenVec(const std::vector<geometry_msgs::msg::TransformStamped> transformVec){
     std::vector<Eigen::Matrix4d> eigenVec;
     for(int i = 0; i < transformVec.size(); i++){
-        Eigen::Isometry3d iso = tf2::transformToEigen(transformVec[i]);
-        eigenVec.push_back(iso.matrix());
+        // Eigen::Isometry3d iso = tf2::transformToEigen(transformVec[i]);
+        // eigenVec.push_back(iso.matrix());
+
+        // Without using tf2
+        Eigen::Matrix4d mat = transformToEigenMatrix(transformVec[i]);
+        eigenVec.push_back(mat);
     }
     return eigenVec;
 }

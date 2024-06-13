@@ -1,0 +1,4 @@
+auto_hand_eye_calib:
+  ros__parameters:
+    camera_calibration_file: "./cameraCalibrated13.txt"
+    joint_state_file: "./jointState13.txt"

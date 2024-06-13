@@ -37,7 +37,6 @@ class CharucoCalibServer : public rclcpp::Node{
             // Create a subscriber to get the camera info, only once
             this->declare_parameter("camera_info_topic", "/camera/camera_info");
             std::string cameraInfoTopic = this->get_parameter("camera_info_topic").as_string();
-            RCLCPP_INFO(this->get_logger(), "Printing the cameraInfoTopic: %s", cameraInfoTopic.c_str());
             cameraInfoSub = this->create_subscription<sensor_msgs::msg::CameraInfo>(
                 cameraInfoTopic.c_str(), 10, std::bind(&CharucoCalibServer::cameraInfoCallback, this, std::placeholders::_1));
         }

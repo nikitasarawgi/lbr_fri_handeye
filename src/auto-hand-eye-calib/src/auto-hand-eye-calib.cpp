@@ -19,6 +19,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <fstream>
 #include <cv_bridge/cv_bridge.h>
+
 class AutoHandEyeCalib : public rclcpp::Node{
     public:
         AutoHandEyeCalib():Node("auto_hand_eye_calib"){
@@ -26,8 +27,8 @@ class AutoHandEyeCalib : public rclcpp::Node{
 
             this->declare_parameter("image_topic", "/camera/camera/color/image_raw");
             this->declare_parameter("joint_state_topic", "/lbr/joint_states");
-            this->declare_parameter("camera_calibration_file", "./cameraCalibrated987.txt");
-            this->declare_parameter("joint_state_file", "./jointState987.txt");
+            this->declare_parameter("camera_calibration_file", "./cameraCalibrated-try3.txt");
+            this->declare_parameter("joint_state_file", "./jointState-try3.txt");
             this->declare_parameter("image_data_folder", "./images/");
             this->declare_parameter("save_images", true);
             this->declare_parameter("is_calibrate_camera", true);
@@ -76,21 +77,21 @@ class AutoHandEyeCalib : public rclcpp::Node{
             fkClient_ = this->create_client<moveit_msgs::srv::GetPositionFK>("/lbr/compute_fk", rmw_qos_profile_default, fkCallbackGroup_);
             cameraCalibrationClient_ = this->create_client<hand_eye_msgs::srv::CameraCalibratedTransform>("/charuco_calib_server", rmw_qos_profile_default, calibCallbackGroup_);
 
-            while(!cameraCalibrationClient_->wait_for_service(std::chrono::seconds(1))){
-                if(!rclcpp::ok()){
-                    RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for service. Exiting...");
-                    return;
-                }
-                RCLCPP_INFO(this->get_logger(), "Charuco service not available. Waiting...");
-            }
+            // while(!cameraCalibrationClient_->wait_for_service(std::chrono::seconds(1))){
+            //     if(!rclcpp::ok()){
+            //         RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for service. Exiting...");
+            //         return;
+            //     }
+            //     RCLCPP_INFO(this->get_logger(), "Charuco service not available. Waiting...");
+            // }
 
-            while(!fkClient_->wait_for_service(std::chrono::seconds(1))){
-                if(!rclcpp::ok()){
-                    RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for service. Exiting...");
-                    return;
-                }
-                RCLCPP_INFO(this->get_logger(), "Moveit compute kinematics service not available. Waiting...");
-            }
+            // while(!fkClient_->wait_for_service(std::chrono::seconds(1))){
+            //     if(!rclcpp::ok()){
+            //         RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for service. Exiting...");
+            //         return;
+            //     }
+            //     RCLCPP_INFO(this->get_logger(), "Moveit compute kinematics service not available. Waiting...");
+            // }
 
             inputThread_ = std::thread(&AutoHandEyeCalib::readInput, this);
             keepRunning_ = true;
@@ -121,7 +122,6 @@ class AutoHandEyeCalib : public rclcpp::Node{
         void imageCallback(const sensor_msgs::msg::Image::SharedPtr image){
             if(readImage_){
                 {
-                    RCLCPP_INFO(this->get_logger(), "I am in image callback...");
                     std::lock_guard<std::mutex> lock(mutex1_);
                     if(isCalibrateCamera_){
                         readImage_ = false;
@@ -187,31 +187,19 @@ class AutoHandEyeCalib : public rclcpp::Node{
                         RCLCPP_INFO(this->get_logger(), "Forward kinematics data received successfully...");
                         // Convert the data to geometry_msgs and save the data to the vector
                         geometry_msgs::msg::PoseStamped p = result.get()->pose_stamped[0];
-                        // RCLCPP_INFO(this->get_logger(), "Just printing x here. x: %f", p.pose.position.x);
-                        // RCLCPP_INFO(this->get_logger(), "Just printing y here. y: %f", p.pose.position.y);
-                        // RCLCPP_INFO(this->get_logger(), "Just printing z here. z: %f", p.pose.position.z);
-                        // RCLCPP_INFO(this->get_logger(), "Here successfully...");
                         geometry_msgs::msg::TransformStamped t = poseToTransform(p, "link_ee");
-                        // RCLCPP_INFO(this->get_logger(), "Here also successfully...");
-                        // RCLCPP_INFO(this->get_logger(), "Just printing x here. x: %f", t.transform.translation.x);
-                        // RCLCPP_INFO(this->get_logger(), "Just printing y here. y: %f", t.transform.translation.y);
-                        // RCLCPP_INFO(this->get_logger(), "Just printing z here. z: %f", t.transform.translation.z);
                         
                         {
                             std::lock_guard<std::mutex> data_lock(mutex2_);
                             jointStateData_.push_back(t);
-                            // RCLCPP_INFO(this->get_logger(), "Here also 2 successfully...");
                             RCLCPP_INFO(this->get_logger(), "Transformation pushed. New size: %d", jointStateData_.size());
                         }
-                        // RCLCPP_INFO(this->get_logger(), "Here also 3 successfully...");
                         return;
                         
                 }else{
                     RCLCPP_ERROR(this->get_logger(), "Failed to receive moveit FK data...");
                     return;
                 }
-                // RCLCPP_INFO(this->get_logger(), "Here also 3 successfully...");
-                // return;
             }   
         }
         void saveData(){
@@ -258,18 +246,32 @@ class AutoHandEyeCalib : public rclcpp::Node{
             std::string line;
 
             while(std::getline(cfile, line)){
-                line = line.substr(1, line.size() - 2);
+                line.erase(std::remove(line.begin(), line.end(), '['), line.end());
+                line.erase(std::remove(line.begin(), line.end(), ']'), line.end());
 
                 std::istringstream iss(line);
-                std::vector<double> matrixElements((std::istream_iterator<double>(iss)), std::istream_iterator<double>());
+                std::string value;
+                std::vector<double> matrixElements;
+
+                while (std::getline(iss, value, ',')) {
+                    matrixElements.push_back(std::stod(value));
+                }
 
                 geometry_msgs::msg::TransformStamped transform;
-                tf2::Matrix3x3 rotMatrix(matrixElements[0], matrixElements[1], matrixElements[2],
-                                        matrixElements[4], matrixElements[5], matrixElements[6],
-                                        matrixElements[8], matrixElements[9], matrixElements[10]);
-                tf2::Vector3 translation(matrixElements[3], matrixElements[7], matrixElements[11]);
-                tf2::Transform tf2_transform(rotMatrix, translation);
-                transform.transform = tf2::toMsg(tf2_transform);
+
+                transform.transform.translation.x = matrixElements[3];
+                transform.transform.translation.y = matrixElements[7];
+                transform.transform.translation.z = matrixElements[11];
+
+                Eigen::Matrix3d rotMatrix;
+                rotMatrix << matrixElements[0], matrixElements[1], matrixElements[2],
+                            matrixElements[4], matrixElements[5], matrixElements[6],
+                            matrixElements[8], matrixElements[9], matrixElements[10];
+                Eigen::Quaterniond q(rotMatrix);
+                transform.transform.rotation.x = q.x();
+                transform.transform.rotation.y = q.y();
+                transform.transform.rotation.z = q.z();
+                transform.transform.rotation.w = q.w();
 
                 cameraCalibrationData_.push_back(transform);
             }
@@ -279,18 +281,32 @@ class AutoHandEyeCalib : public rclcpp::Node{
             std::ifstream jfile(jointStateDataFile_);
 
             while(std::getline(jfile, line)){
-                line = line.substr(1, line.size() - 2);
+                line.erase(std::remove(line.begin(), line.end(), '['), line.end());
+                line.erase(std::remove(line.begin(), line.end(), ']'), line.end());
 
                 std::istringstream iss(line);
-                std::vector<double> matrixElements((std::istream_iterator<double>(iss)), std::istream_iterator<double>());
+                std::string value;
+                std::vector<double> matrixElements;
+
+                while (std::getline(iss, value, ',')) {
+                    matrixElements.push_back(std::stod(value));
+                }
 
                 geometry_msgs::msg::TransformStamped transform;
-                tf2::Matrix3x3 rotMatrix(matrixElements[0], matrixElements[1], matrixElements[2],
-                                        matrixElements[4], matrixElements[5], matrixElements[6],
-                                        matrixElements[8], matrixElements[9], matrixElements[10]);
-                tf2::Vector3 translation(matrixElements[3], matrixElements[7], matrixElements[11]);
-                tf2::Transform tf2_transform(rotMatrix, translation);
-                transform.transform = tf2::toMsg(tf2_transform);
+
+                transform.transform.translation.x = matrixElements[3];
+                transform.transform.translation.y = matrixElements[7];
+                transform.transform.translation.z = matrixElements[11];
+
+                Eigen::Matrix3d rotMatrix;
+                rotMatrix << matrixElements[0], matrixElements[1], matrixElements[2],
+                            matrixElements[4], matrixElements[5], matrixElements[6],
+                            matrixElements[8], matrixElements[9], matrixElements[10];
+                Eigen::Quaterniond q(rotMatrix);
+                transform.transform.rotation.x = q.x();
+                transform.transform.rotation.y = q.y();
+                transform.transform.rotation.z = q.z();
+                transform.transform.rotation.w = q.w();
 
                 jointStateData_.push_back(transform);
             }
@@ -301,6 +317,9 @@ class AutoHandEyeCalib : public rclcpp::Node{
 
             std::vector<Eigen::Matrix4d> cameraCalibrationEigen = transformVecToEigenVec(cameraCalibrationData_);
             std::vector<Eigen::Matrix4d> jointStateEigen = transformVecToEigenVec(jointStateData_);
+
+            RCLCPP_INFO(this->get_logger(), "Size of cameraCalibrationEigen: %d", cameraCalibrationEigen.size());
+            RCLCPP_INFO(this->get_logger(), "Size of jointStateEigen: %d", jointStateEigen.size());
 
             // Create the A and B vectors for the AXXB solvers
             std::vector<Eigen::Matrix4d> A_values;
@@ -346,6 +365,14 @@ class AutoHandEyeCalib : public rclcpp::Node{
              Eigen::Matrix4d result5 = camodocal_solver.SolveX();
             RCLCPP_INFO(this->get_logger(), "Camodocal's CamodocalDanii: ");
             printMatrix(result5);
+
+            RCLCPP_INFO(this->get_logger(), "PRINTING TFC PART 1...");
+            Eigen::Matrix4d tfc = cameraCalibrationEigen[0] * result5.inverse() * jointStateEigen[0];
+            printMatrix(tfc.inverse());
+
+            RCLCPP_INFO(this->get_logger(), "PRINTING TFC PART 2...");
+            Eigen::Matrix4d tfc2 = cameraCalibrationEigen[1] * result5.inverse() * jointStateEigen[1];
+            printMatrix(tfc2.inverse());
 
         }
         void printMatrix(Eigen::Matrix4d matrix){
