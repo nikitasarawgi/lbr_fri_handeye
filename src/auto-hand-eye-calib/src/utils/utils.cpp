@@ -33,7 +33,7 @@ geometry_msgs::msg::TransformStamped cvMatToTransformStamped(const cv::Mat& tran
     transformStamped.header.frame_id = frame_id;
     transformStamped.child_frame_id = child_frame_id;
 
-    tf2::Vector3 position;
+    // tf2::Vector3 position;
 
     // position.setX(transform.at<double>(0, 3));
     // position.setY(transform.at<double>(1, 3));
@@ -41,6 +41,7 @@ geometry_msgs::msg::TransformStamped cvMatToTransformStamped(const cv::Mat& tran
     //  transformStamped.transform.translation = tf2::toMsg(position);
 
     // without tf2
+    Eigen::Vector3d position;
     position.x() = transform.at<double>(0, 3);
     position.y() = transform.at<double>(1, 3);
     position.z() = transform.at<double>(2, 3);
